@@ -6,36 +6,37 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "ios": {
       "supportsTablet": true,
-
       "infoPlist": {
         "NSCameraUsageDescription": "Esta aplicação precisa de acesso à câmera para que você possa anexar fotos dos documentos dos contratos.",
         "NSPhotoLibraryUsageDescription": "Esta aplicação precisa de acesso à galeria para que você possa selecionar e anexar fotos dos documentos dos contratos."
       }
     },
-
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.CAMERA"
       ]
-    }
+    },
+    "plugins": [
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ]
+    ]
   }
 }

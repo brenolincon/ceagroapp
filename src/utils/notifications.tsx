@@ -43,6 +43,7 @@ export async function scheduleContractAlert(
       sound: "default",
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
       date: dataAlerta, // agendamento para data específica
     },
   });
