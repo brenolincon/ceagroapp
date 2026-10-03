@@ -20,6 +20,7 @@ interface Props {
   initialFolderName?: string;
   initialFileName?: string;
   autoStartSource?: "camera" | "gallery" | null;
+  onUnsavedImagesChange?: (hasUnsavedImages: boolean) => void;
 }
 
 export function DocumentAttachment({
@@ -27,6 +28,7 @@ export function DocumentAttachment({
   initialFolderName,
   initialFileName,
   autoStartSource = null,
+  onUnsavedImagesChange,
 }: Props) {
   const [images, setImages] = useState<AttachmentImage[]>([]);
   const [folderName, setFolderName] = useState(initialFolderName ?? "");
@@ -34,6 +36,7 @@ export function DocumentAttachment({
   const [lastSavedUri, setLastSavedUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [failedImageUris, setFailedImageUris] = useState<string[]>([]);
 
   // --- Funções de Seleção/Captura ---
   const pickImage = async (source: "camera" | "gallery") => {
@@ -46,7 +49,7 @@ export function DocumentAttachment({
 
         if (status !== "granted") {
           alert(
-            "Permissão de Câmera negada. Verifique as configurações do app."
+            "Permissão de Câmera negada. Verifique as configurações do app.",
           );
           console.error("Permissão de câmera negada. Status:", status);
           return;
@@ -67,7 +70,7 @@ export function DocumentAttachment({
 
         if (status !== "granted") {
           alert(
-            "Permissão de Galeria negada. Verifique as configurações do app."
+            "Permissão de Galeria negada. Verifique as configurações do app.",
           );
           console.error("Permissão de galeria negada. Status:", status);
           return;
@@ -97,7 +100,7 @@ export function DocumentAttachment({
       // Captura qualquer erro inesperado durante o processo de seleção/câmera
       console.error(`Erro fatal ao tentar acessar ${source}:`, error);
       alert(
-        `Erro inesperado ao abrir ${source}. Verifique o terminal para detalhes.`
+        `Erro inesperado ao abrir ${source}. Verifique o terminal para detalhes.`,
       );
     }
   };
@@ -111,10 +114,14 @@ export function DocumentAttachment({
         { text: "Cancelar", style: "cancel" },
         {
           text: "Remover",
-          onPress: () =>
-            setImages((prev) => prev.filter((img) => img.uri !== uriToRemove)),
+          onPress: () => {
+            setImages((prev) => prev.filter((img) => img.uri !== uriToRemove));
+            setFailedImageUris((prev) =>
+              prev.filter((uri) => uri !== uriToRemove),
+            );
+          },
         },
-      ]
+      ],
     );
   };
 
@@ -128,13 +135,36 @@ export function DocumentAttachment({
         fileName.trim() || `Documento_${new Date().toISOString().slice(0, 10)}`;
       const finalFolderName = folderName.trim() || "Documentos";
 
-      const uri = await generatePdf(images, finalFileName, finalFolderName);
+      const result = await generatePdf(images, finalFileName, finalFolderName);
 
-      if (uri) {
-        setLastSavedUri(uri);
-        alert("PDF salvo com sucesso.");
-        onFinish?.();
+      if (!result) {
+        return;
       }
+
+      if (result.status === "invalid-pages") {
+        const failedUris = result.failedPageIndexes
+          .map((index) => images[index]?.uri)
+          .filter((uri): uri is string => uri !== undefined);
+
+        const failedPageNumbers = result.failedPageIndexes.map(
+          (index) => index + 1,
+        );
+
+        setFailedImageUris(failedUris);
+
+        Alert.alert(
+          "Não foi possível validar todas as páginas",
+          `Falha ao ler a(s) página(s) ${failedPageNumbers.join(", ")}. ` +
+            "Nenhum PDF foi salvo. Tente novamente ou remova as páginas com falha.",
+        );
+
+        return;
+      }
+
+      setFailedImageUris([]);
+      setLastSavedUri(result.uri);
+      alert("PDF salvo com sucesso.");
+      onFinish?.();
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
       alert("Falha ao gerar o PDF. Verifique o terminal.");
@@ -161,6 +191,10 @@ export function DocumentAttachment({
 
   const hasPages = images.length > 0;
 
+  useEffect(() => {
+    onUnsavedImagesChange?.(images.length > 0);
+  }, [images.length, onUnsavedImagesChange]);
+
   // Abrir automaticamente a câmera ao iniciar (para novo scanner)
   useEffect(() => {
     if (autoStartSource && !hasPages) {
@@ -178,8 +212,8 @@ export function DocumentAttachment({
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>Nenhuma página ainda</Text>
           <Text style={styles.emptySubtitle}>
-            Toque em "Tirar foto" ou "Selecionar da galeria" para começar um novo
-            scanner.
+            Toque em "Tirar foto" ou "Selecionar da galeria" para começar um
+            novo scanner.
           </Text>
 
           <View style={styles.buttonGroup}>
@@ -214,21 +248,35 @@ export function DocumentAttachment({
               style={[styles.secondaryButton, styles.button]}
               onPress={() => pickImage("gallery")}
             >
-              <Text style={styles.secondaryButtonText}>
-                + Página (galeria)
-              </Text>
+              <Text style={styles.secondaryButtonText}>+ Página (galeria)</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.subHeader}>
-            Páginas ({images.length})
-          </Text>
+          <Text style={styles.subHeader}>Páginas ({images.length})</Text>
 
           <ScrollView style={styles.imageScroll}>
             {images.map((img, index) => (
               <View key={img.uri} style={styles.imageContainer}>
                 <Text style={styles.imageLabel}>Página {index + 1}</Text>
                 <Image source={{ uri: img.uri }} style={styles.image} />
+                {failedImageUris.includes(img.uri) && (
+                  <View>
+                    <Text style={styles.imageError}>
+                      Não foi possível validar esta imagem. Tente novamente ou
+                      remova a página.
+                    </Text>
+
+                    <TouchableOpacity
+                      style={styles.retryButton}
+                      onPress={handleSavePdf}
+                      disabled={saving}
+                    >
+                      <Text style={styles.retryButtonText}>
+                        {saving ? "Verificando..." : "Tentar novamente"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
                 <TouchableOpacity
                   onPress={() => removeImage(img.uri)}
                   style={styles.removeButton}
@@ -464,5 +512,21 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontWeight: "600",
     fontSize: 15,
+  },
+  imageError: {
+    marginTop: 8,
+    color: "#b91c1c",
+    fontSize: 13,
+  },
+  retryButton: {
+    marginTop: 8,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+    backgroundColor: "#fef2f2",
+  },
+  retryButtonText: {
+    color: "#b91c1c",
+    fontWeight: "600",
   },
 });

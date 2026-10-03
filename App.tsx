@@ -1,6 +1,14 @@
 // App.tsx
-import { useEffect, useState } from "react";
-import { ScrollView, Text, View, StyleSheet, TouchableOpacity } from "react-native";
+import { useEffect, useState, useCallback } from "react";
+import {
+  Alert,
+  BackHandler,
+  ScrollView,
+  Text,
+  View,
+  StyleSheet,
+  TouchableOpacity,
+} from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"; // <-- NOVA IMPORTAÇÃO
 import { DocumentAttachment } from "./src/components/DocumentAttachment";
 import { listSavedPdfs, SavedPdf, sharePdf } from "./src/utils/pdfGenerator";
@@ -41,7 +49,9 @@ function HomeScreen({
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Histórico de documentos</Text>
             <TouchableOpacity onPress={load}>
-              <Text style={styles.sectionAction}>{loading ? "Atualizando..." : "Atualizar"}</Text>
+              <Text style={styles.sectionAction}>
+                {loading ? "Atualizando..." : "Atualizar"}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -80,11 +90,45 @@ function ScannerScreen({
   initialFileName?: string;
   autoStartSource?: "camera" | "gallery" | null;
 }) {
+  const [hasUnsavedImages, setHasUnsavedImages] = useState(false);
+  const requestExit = useCallback(() => {
+    if (!hasUnsavedImages) {
+      onBack();
+      return;
+    }
+
+    Alert.alert(
+      "Descartar digitalização?",
+      "As imagens capturadas ainda não foram salvas em PDF. Se sair agora, elas serão perdidas.",
+      [
+        {
+          text: "Continuar editando",
+          style: "cancel",
+        },
+        {
+          text: "Descartar e sair",
+          style: "destructive",
+          onPress: onBack,
+        },
+      ],
+    );
+  }, [hasUnsavedImages, onBack]);
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        requestExit();
+        return true;
+      },
+    );
+
+    return () => subscription.remove();
+  }, [requestExit]);
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <TouchableOpacity onPress={requestExit} style={styles.backButton}>
             <Text style={styles.backButtonText}>◀</Text>
           </TouchableOpacity>
           <Text style={styles.title}>Novo scanner</Text>
@@ -97,6 +141,7 @@ function ScannerScreen({
             initialFolderName={initialFolderName}
             initialFileName={initialFileName}
             autoStartSource={autoStartSource}
+            onUnsavedImagesChange={setHasUnsavedImages}
           />
         </View>
       </ScrollView>
@@ -149,7 +194,9 @@ function DetailScreen({
               style={styles.shareExistingButton}
               onPress={handleShare}
             >
-              <Text style={styles.shareExistingButtonText}>Compartilhar PDF</Text>
+              <Text style={styles.shareExistingButtonText}>
+                Compartilhar PDF
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
